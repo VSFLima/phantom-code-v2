@@ -52,11 +52,11 @@ erro visível, recuperação/repetição e teste de reabertura do app.
 | Função | Status | Observação |
 | --- | --- | --- |
 | Contrato de estado do runtime | em andamento | Primeiro esqueleto publicado |
-| Instalação transacional | pendente | Sem diretório parcialmente válido |
-| Verificação SHA-256 | pendente | Antes de publicar distro |
-| QEMU ARM64 | pendente | Validar no dispositivo real |
-| Iniciar/parar VM | pendente | Máquina de estados única |
-| Terminal Linux interativo | pendente | Entrada e saída verificáveis |
+| Instalação transacional | em andamento | Download, SHA-256 e troca atômica implementados |
+| Verificação SHA-256 | em andamento | Implementada para o pacote Phantom |
+| QEMU ARM64 | em andamento | Empacotado no APK pelo workflow; falta validar no aparelho |
+| Iniciar/parar VM | em andamento | Primeiro fluxo implementado |
+| Terminal Linux interativo | em andamento | Entrada/saída inicial implementada; falta teste real |
 | Comandos no guest | pendente | Sem scanner concorrendo com console |
 | Trocar distro | pendente | Uma distro ativa por vez inicialmente |
 | Desinstalar distro | pendente | Confirmar e selecionar fallback |
