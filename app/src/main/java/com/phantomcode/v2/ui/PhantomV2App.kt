@@ -51,7 +51,8 @@ private enum class Screen { PROJECTS, FILES, EDITOR, LINUX }
 
 @Composable
 fun PhantomV2App(runtime: LinuxRuntimeController) {
-    val workspace = remember { WorkspaceController(androidx.compose.ui.platform.LocalContext.current) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val workspace = remember { WorkspaceController(context) }
     var screen by remember { mutableStateOf(Screen.PROJECTS) }
     var projects by remember { mutableStateOf(workspace.projects()) }
     var selectedProject by remember { mutableStateOf<WorkspaceProject?>(null) }
