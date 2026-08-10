@@ -120,7 +120,7 @@ fun PhantomV2App(runtime: LinuxRuntimeController) {
                     }
                 },
             )
-            Screen.LINUX -> LinuxScreen()
+            Screen.LINUX -> LinuxScreen(runtime)
         }
     }
 
@@ -228,12 +228,41 @@ private fun EditorScreen(file: WorkspaceFile?, text: String, savedMessage: Strin
 }
 
 @Composable
-private fun LinuxScreen() {
+private fun LinuxScreen(runtime: LinuxRuntimeController) {
+    var command by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Icon(Icons.Default.Terminal, null, tint = Color(0xFFB794F4))
         Text("Linux", color = Color.White, fontSize = 24.sp)
-        Text("O runtime QEMU será conectado nesta tela após o instalador transacional e a sessão de terminal passarem pelos testes. Nenhuma instalação falsa é apresentada.", color = Color(0xFFB7B3C6))
+        Text("Estado: ${runtime.state.label()}", color = Color(0xFFB7B3C6))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = runtime::install, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.NoDistro) { Text("Instalar distro") }
+            Button(onClick = runtime::start, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Ready) { Text("Iniciar") }
+            OutlinedButton(onClick = runtime::stop, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running) { Text("Parar") }
+        }
+        runtime.progress?.let { value -> Text("Download: ${(value * 100).toInt()}%", color = Color(0xFFB794F4)) }
+        runtime.error?.let { Text(it, color = Color(0xFFF56565), fontSize = 12.sp) }
+        BasicTextField(
+            value = command,
+            onValueChange = { command = it },
+            modifier = Modifier.fillMaxWidth().background(Color(0xFF171522)).padding(10.dp),
+            textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace),
+            cursorBrush = SolidColor(Color(0xFFB794F4)),
+            singleLine = true,
+        )
+        Button(onClick = { runtime.sendInput(command); command = "" }, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running && command.isNotBlank()) {
+            Text("Enviar comando")
+        }
+        Text(runtime.output.ifBlank { "O console Linux aparecerá aqui." }, color = Color(0xFFE2E8F0), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
     }
+}
+
+private fun com.phantomcode.v2.vm.LinuxUiState.label(): String = when (this) {
+    com.phantomcode.v2.vm.LinuxUiState.NoDistro -> "Nenhuma distro"
+    com.phantomcode.v2.vm.LinuxUiState.Installing -> "Instalando"
+    com.phantomcode.v2.vm.LinuxUiState.Ready -> "Pronto"
+    com.phantomcode.v2.vm.LinuxUiState.Starting -> "Iniciando"
+    com.phantomcode.v2.vm.LinuxUiState.Running -> "Linux ativo"
+    com.phantomcode.v2.vm.LinuxUiState.Error -> "Erro"
 }
 
 @Composable
