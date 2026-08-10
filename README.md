@@ -37,6 +37,10 @@ feedback de sucesso/erro e teste de reabertura do app.
 - `spckio/spck-embed` e `spck-io/spck-cli` só podem ser usados dentro das
   respectivas licenças MIT.
 - O Phantom-Code atual não é alterado por este projeto.
+- Toda função deve ser registrada em `docs/FEATURE-MATRIX.md` como feita,
+  pendente, em andamento ou bloqueada.
+- Toda tela deve seguir `docs/UI-CONTRACT.md`; o menu lateral compacto e o tema
+  serão aplicados depois que o núcleo funcional estiver estável.
 
 ## Milestones
 
