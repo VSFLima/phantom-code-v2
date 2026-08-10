@@ -41,6 +41,8 @@ feedback de sucesso/erro e teste de reabertura do app.
   pendente, em andamento ou bloqueada.
 - Toda tela deve seguir `docs/UI-CONTRACT.md`; o menu lateral compacto e o tema
   serão aplicados depois que o núcleo funcional estiver estável.
+- A integração Linux/IA/editor segue `docs/LIVE-WORKSPACE.md`, com eventos,
+  revisões, diff e autoria visível em tempo real.
 
 ## Milestones
 
