@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   actions: write
 
 jobs:
@@ -33,8 +33,22 @@ jobs:
           ls -lh app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: phantom-code-v2-debug
+          name: phantom-code-v2-debug-${{ github.run_number }}
           path: ${{ github.workspace }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publish manual APK release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v2-debug-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            app/build/outputs/apk/debug/app-debug.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Phantom-Code V2 debug ${GITHUB_RUN_NUMBER}" \
+            --notes "Build manual da V2." \
+            --prerelease
