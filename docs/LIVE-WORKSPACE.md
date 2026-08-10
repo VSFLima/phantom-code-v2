@@ -76,6 +76,10 @@ A interface terá:
 O transporte pode ser `SharedFlow` dentro do app. Alterações vindas do guest
 chegam pelo canal de controle autenticado; a UI nunca lê diretamente o socket.
 
+O primeiro núcleo foi iniciado em `workspace/WorkspaceService.kt`. Nesta fase
+ele publica eventos do editor; os adaptadores Linux, Git e IA serão conectados
+ao mesmo serviço, sem criar barramentos paralelos.
+
 ## Benefício
 
 Assim o usuário sempre sabe:

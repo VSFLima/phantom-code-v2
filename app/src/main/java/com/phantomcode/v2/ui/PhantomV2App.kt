@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,16 +44,16 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.phantomcode.v2.vm.LinuxRuntimeController
-import com.phantomcode.v2.workspace.WorkspaceController
 import com.phantomcode.v2.workspace.WorkspaceFile
 import com.phantomcode.v2.workspace.WorkspaceProject
+import com.phantomcode.v2.workspace.WorkspaceService
 
 private enum class Screen { PROJECTS, FILES, EDITOR, LINUX }
 
 @Composable
 fun PhantomV2App(runtime: LinuxRuntimeController) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val workspace = remember { WorkspaceController(context) }
+    val workspace = remember { WorkspaceService(context) }
     var screen by remember { mutableStateOf(Screen.PROJECTS) }
     var projects by remember { mutableStateOf(workspace.projects()) }
     var selectedProject by remember { mutableStateOf<WorkspaceProject?>(null) }
@@ -62,6 +63,13 @@ fun PhantomV2App(runtime: LinuxRuntimeController) {
     var newFileOpen by remember { mutableStateOf(false) }
     var nameInput by remember { mutableStateOf("") }
     var savedMessage by remember { mutableStateOf("") }
+    var activityMessage by remember { mutableStateOf("") }
+
+    LaunchedEffect(workspace) {
+        workspace.events.collect { event ->
+            activityMessage = "${event.actorId} · ${event.operation.name.lowercase()} · ${event.path.ifBlank { event.project }}"
+        }
+    }
 
     fun openProject(project: WorkspaceProject) {
         selectedProject = project
@@ -97,6 +105,7 @@ fun PhantomV2App(runtime: LinuxRuntimeController) {
                 workspace = workspace,
                 onOpen = ::openFile,
                 onNew = { nameInput = ""; newFileOpen = true },
+                activityMessage = activityMessage,
             )
             Screen.EDITOR -> EditorScreen(
                 file = selectedFile,
@@ -104,7 +113,11 @@ fun PhantomV2App(runtime: LinuxRuntimeController) {
                 savedMessage = savedMessage,
                 onTextChange = { editorText = it; savedMessage = "" },
                 onSave = {
-                    selectedFile?.let { savedMessage = if (workspace.write(it.file, editorText)) "Salvo" else "Falha ao salvar" }
+                    val project = selectedProject
+                    val file = selectedFile
+                    if (project != null && file != null) {
+                        savedMessage = if (workspace.write(project, file, editorText)) "Salvo" else "Falha ao salvar"
+                    }
                 },
             )
             Screen.LINUX -> LinuxScreen()
@@ -172,13 +185,14 @@ private fun ProjectsScreen(projects: List<WorkspaceProject>, onOpen: (WorkspaceP
 }
 
 @Composable
-private fun FilesScreen(project: WorkspaceProject?, workspace: WorkspaceController, onOpen: (WorkspaceFile) -> Unit, onNew: () -> Unit) {
+private fun FilesScreen(project: WorkspaceProject?, workspace: WorkspaceService, onOpen: (WorkspaceFile) -> Unit, onNew: () -> Unit, activityMessage: String) {
     Column(Modifier.fillMaxSize().padding(20.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Arquivos", color = Color.White, fontSize = 22.sp, modifier = Modifier.weight(1f))
             OutlinedButton(onClick = onNew) { Text("Novo arquivo") }
         }
         Spacer(Modifier.height(12.dp))
+        if (activityMessage.isNotBlank()) Text("Atividade: $activityMessage", color = Color(0xFF68D391), fontSize = 12.sp)
         project?.let { current ->
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(workspace.files(current), key = { it.file.absolutePath }) { file ->

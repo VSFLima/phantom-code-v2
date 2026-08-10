@@ -21,6 +21,8 @@ erro visível, recuperação/repetição e teste de reabertura do app.
 | Abrir arquivo | em andamento | Implementado; editor básico |
 | Editar texto | em andamento | Implementado; aguardando teste no APK |
 | Salvar arquivo | em andamento | Implementado; aguardando teste no APK |
+| WorkspaceService/eventos | em andamento | Editor publica eventos; Linux/IA ainda não conectados |
+| Feed de atividade | em andamento | Mostra a última alteração no projeto |
 | Pastas aninhadas | pendente | Próxima melhoria do explorer |
 | Abas de editor | pendente | Requer modelo de sessão |
 | Restaurar sessão | pendente | Persistir projeto, arquivos e cursor |
