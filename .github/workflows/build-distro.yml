@@ -42,6 +42,7 @@ jobs:
 
       - name: Prepare initramfs modules list
         run: |
+          sudo mkdir -p rootfs/etc/initramfs-tools
           sudo tee rootfs/etc/initramfs-tools/modules >/dev/null <<'EOF'
           ext4
           virtio_blk
