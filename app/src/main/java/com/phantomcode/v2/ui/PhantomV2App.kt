@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,11 +20,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Save
@@ -48,10 +55,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -299,37 +309,80 @@ private fun EditorScreen(file: WorkspaceFile?, text: String, savedMessage: Strin
 @Composable
 private fun LinuxScreen(runtime: LinuxRuntimeController) {
     var command by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Icon(Icons.Default.Terminal, null, tint = Color(0xFFB794F4))
-        Text("Linux", color = Color.White, fontSize = 24.sp)
-        Text("Estado: ${runtime.state.label()}", color = Color(0xFFB7B3C6))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = runtime::install, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.NoDistro) { Text("Instalar distro") }
+    val scrollState = rememberScrollState()
+    val clipboard = LocalClipboardManager.current
+
+    LaunchedEffect(runtime.output) {
+        scrollState.scrollTo(Int.MAX_VALUE)
+    }
+
+    Column(Modifier.fillMaxSize().background(Color(0xFF0B0B12))) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Terminal, null, tint = Color(0xFFB794F4))
+            Spacer(Modifier.width(8.dp))
+            Text("Linux", color = Color.White, fontSize = 20.sp, modifier = Modifier.weight(1f))
+            Text("Estado: ${runtime.state.label()}", color = Color(0xFFB7B3C6), fontSize = 12.sp)
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = runtime::install, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.NoDistro) { Text("Instalar") }
             Button(onClick = runtime::start, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Ready) { Text("Iniciar") }
             OutlinedButton(onClick = runtime::stop, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running) { Text("Parar") }
         }
-        runtime.progress?.let { value -> Text("Download: ${(value * 100).toInt()}%", color = Color(0xFFB794F4)) }
+        runtime.progress?.let { value -> Text("Download: ${(value * 100).toInt()}%", color = Color(0xFFB794F4), modifier = Modifier.padding(horizontal = 16.dp)) }
         if (runtime.installLog.isNotBlank()) {
-            Column(
-                Modifier.fillMaxWidth().weight(1f, fill = false).height(160.dp)
-                    .background(Color(0xFF171522)).verticalScroll(rememberScrollState()).padding(10.dp),
-            ) {
-                Text(runtime.installLog, color = Color(0xFF68D391), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+            Text(
+                runtime.installLog,
+                color = Color(0xFF68D391),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).height(72.dp).verticalScroll(rememberScrollState()),
+            )
+        }
+        runtime.error?.let { Text(it, color = Color(0xFFF56565), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp)) }
+        SelectionContainer {
+            Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollState).padding(12.dp)) {
+                Text(
+                    runtime.output.ifBlank { "O console Linux aparecerá aqui.\n\nUse a barra abaixo para enviar comandos." },
+                    color = Color(0xFFE2E8F0),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                )
             }
         }
-        runtime.error?.let { Text(it, color = Color(0xFFF56565), fontSize = 12.sp) }
-        BasicTextField(
-            value = command,
-            onValueChange = { command = it },
-            modifier = Modifier.fillMaxWidth().background(Color(0xFF171522)).padding(10.dp),
-            textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace),
-            cursorBrush = SolidColor(Color(0xFFB794F4)),
-            singleLine = true,
-        )
-        Button(onClick = { runtime.sendInput(command); command = "" }, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running && command.isNotBlank()) {
-            Text("Enviar comando")
+        Row(
+            Modifier.fillMaxWidth().background(Color(0xFF171522)).padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = { runCatching { clipboard.setText(AnnotatedString(runtime.output)) } }) {
+                Icon(Icons.Default.ContentCopy, "Copiar saída", tint = Color(0xFFB794F4))
+            }
+            IconButton(onClick = { runCatching { clipboard.getText()?.text?.let { command = it } } }) {
+                Icon(Icons.Default.ContentPaste, "Colar", tint = Color(0xFFB794F4))
+            }
+            IconButton(onClick = { runtime.clearOutput() }) {
+                Icon(Icons.Default.Delete, "Limpar", tint = Color(0xFFB794F4))
+            }
+            BasicTextField(
+                value = command,
+                onValueChange = { command = it },
+                modifier = Modifier.weight(1f).background(Color(0xFF0D0D14)).padding(horizontal = 10.dp, vertical = 8.dp),
+                textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 14.sp),
+                cursorBrush = SolidColor(Color(0xFFB794F4)),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = {
+                    if (runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running && command.isNotBlank()) {
+                        runtime.sendInput(command)
+                        command = ""
+                    }
+                }),
+            )
+            Spacer(Modifier.width(6.dp))
+            Button(
+                onClick = { runtime.sendInput(command); command = "" },
+                enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running && command.isNotBlank(),
+            ) { Text("Enviar") }
         }
-        Text(runtime.output.ifBlank { "O console Linux aparecerá aqui." }, color = Color(0xFFE2E8F0), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
     }
 }
 

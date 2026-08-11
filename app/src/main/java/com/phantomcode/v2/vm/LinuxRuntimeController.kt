@@ -110,6 +110,10 @@ class LinuxRuntimeController(context: Context) {
         val active = process ?: return
         scope.launch { runCatching { active.outputStream.write((input + "\n").toByteArray()); active.outputStream.flush() } }
     }
+
+    fun clearOutput() {
+        output = ""
+    }
 }
 
 sealed interface LinuxUiState {
