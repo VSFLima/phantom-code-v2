@@ -6,8 +6,8 @@ import java.io.File
 data class WorkspaceProject(val name: String, val directory: File)
 data class WorkspaceFile(val name: String, val file: File, val isDirectory: Boolean)
 
-class WorkspaceController(context: Context) {
-    private val root = File(context.filesDir, "workspace").apply { mkdirs() }
+class WorkspaceController(context: Context, rootDir: File? = null) {
+    private val root = (rootDir ?: File(context.filesDir, "workspace")).apply { mkdirs() }
 
     fun projects(): List<WorkspaceProject> = root.listFiles()
         ?.filter { it.isDirectory }

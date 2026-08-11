@@ -1,6 +1,7 @@
 package com.phantomcode.v2.workspace
 
 import android.content.Context
+import com.phantomcode.v2.storage.StorageAccess
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -19,7 +20,7 @@ data class WorkspaceChangeEvent(
 
 /** Fonte única de alterações do workspace para editor, Linux, Git e IA. */
 class WorkspaceService(context: Context) {
-    private val storage = WorkspaceController(context)
+    private val storage = WorkspaceController(context, StorageAccess.externalRoot(context))
     private val _events = MutableSharedFlow<WorkspaceChangeEvent>(extraBufferCapacity = 32)
     private var revision = 0L
 

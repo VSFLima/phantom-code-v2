@@ -1,5 +1,9 @@
 package com.phantomcode.v2.ui
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,12 +28,15 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,10 +46,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.phantomcode.v2.storage.StorageAccess
 import com.phantomcode.v2.vm.LinuxRuntimeController
 import com.phantomcode.v2.workspace.WorkspaceFile
 import com.phantomcode.v2.workspace.WorkspaceProject
@@ -52,10 +64,11 @@ private enum class Screen { PROJECTS, FILES, EDITOR, LINUX }
 
 @Composable
 fun PhantomV2App(runtime: LinuxRuntimeController) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val workspace = remember { WorkspaceService(context) }
+    val context = LocalContext.current
+    var storageGranted by remember { mutableStateOf(StorageAccess.hasAccess(context)) }
+    val workspace = remember(storageGranted) { WorkspaceService(context) }
     var screen by remember { mutableStateOf(Screen.PROJECTS) }
-    var projects by remember { mutableStateOf(workspace.projects()) }
+    var projects by remember(storageGranted) { mutableStateOf(workspace.projects()) }
     var selectedProject by remember { mutableStateOf<WorkspaceProject?>(null) }
     var selectedFile by remember { mutableStateOf<WorkspaceFile?>(null) }
     var editorText by remember { mutableStateOf("") }
@@ -64,6 +77,39 @@ fun PhantomV2App(runtime: LinuxRuntimeController) {
     var nameInput by remember { mutableStateOf("") }
     var savedMessage by remember { mutableStateOf("") }
     var activityMessage by remember { mutableStateOf("") }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        storageGranted = StorageAccess.hasAccess(context)
+        if (storageGranted) projects = workspace.projects()
+    }
+
+    fun requestStorage() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            context.startActivity(StorageAccess.settingsIntent(context))
+        } else {
+            val permission = if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            } else {
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            }
+            permissionLauncher.launch(permission)
+        }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val granted = StorageAccess.hasAccess(context)
+                if (granted != storageGranted) {
+                    storageGranted = granted
+                    projects = workspace.projects()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(workspace) {
         workspace.events.collect { event ->
@@ -97,6 +143,8 @@ fun PhantomV2App(runtime: LinuxRuntimeController) {
         when (screen) {
             Screen.PROJECTS -> ProjectsScreen(
                 projects = projects,
+                storageGranted = storageGranted,
+                onRequestStorage = ::requestStorage,
                 onOpen = ::openProject,
                 onNew = { nameInput = ""; newProjectOpen = true },
             )
@@ -167,10 +215,29 @@ private fun Header(screen: Screen, projectName: String?, onBack: () -> Unit, onL
 }
 
 @Composable
-private fun ProjectsScreen(projects: List<WorkspaceProject>, onOpen: (WorkspaceProject) -> Unit, onNew: () -> Unit) {
+private fun ProjectsScreen(
+    projects: List<WorkspaceProject>,
+    storageGranted: Boolean,
+    onRequestStorage: () -> Unit,
+    onOpen: (WorkspaceProject) -> Unit,
+    onNew: () -> Unit,
+) {
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Projetos", color = Color.White, fontSize = 24.sp)
         Text("Workspace local persistente, separado do runtime Linux.", color = Color(0xFFB7B3C6))
+        if (!storageGranted) {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1E3A))) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Acesso às pastas necessário", color = Color(0xFFFFD66B), fontSize = 15.sp)
+                    Text(
+                        "Permita o acesso a todos os arquivos para salvar os projetos em /storage/emulated/0/Phantom-Code-V2 e reutilizar arquivos existentes.",
+                        color = Color(0xFFB7B3C6),
+                        fontSize = 12.sp,
+                    )
+                    Button(onClick = onRequestStorage) { Text("Permitir acesso") }
+                }
+            }
+        }
         Button(onClick = onNew) { Icon(Icons.Default.CreateNewFolder, null); Text(" Novo projeto") }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(projects, key = { it.name }) { project ->
