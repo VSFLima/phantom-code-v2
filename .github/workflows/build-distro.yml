@@ -114,10 +114,10 @@ jobs:
 
       - name: Build rootfs.img
         run: |
-          SIZE=$(du -sm rootfs | cut -f1)
+          SIZE=$(sudo du -sm rootfs | cut -f1)
           COUNT=$((SIZE + 300))
           dd if=/dev/zero of=rootfs.img bs=1M count=$COUNT status=none
-          mkfs.ext4 -q -d rootfs rootfs.img
+          sudo mkfs.ext4 -q -d rootfs rootfs.img
           sudo chown $(id -u):$(id -g) rootfs.img
 
       - name: Fetch reference QEMU + bios and assemble dist
