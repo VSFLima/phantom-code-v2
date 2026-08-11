@@ -9,7 +9,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
+import java.nio.charset.CodingErrorAction
 
 class LinuxRuntimeController(context: Context) {
     private val appContext = context.applicationContext
@@ -67,26 +70,58 @@ class LinuxRuntimeController(context: Context) {
                     distroQemu.isFile && distroQemu.canExecute() -> distroQemu
                     else -> error("QEMU não está disponível na distro instalada")
                 }
-                val command = listOf(
-                    qemu.absolutePath, "-M", "virt,accel=tcg", "-cpu", "cortex-a72",
-                    "-smp", "2", "-m", "1024", "-L", distro.absolutePath,
-                    "-kernel", File(distro, "kernel").absolutePath,
-                    "-initrd", File(distro, "initrd.img").absolutePath,
-                    "-append", "root=/dev/vda rw console=hvc0 console=ttyAMA0",
-                    "-drive", "if=none,format=raw,file=${File(distro, "rootfs.img").absolutePath},id=hd0",
-                    "-device", "virtio-blk-device,drive=hd0", "-nographic",
-                )
-                val builder = ProcessBuilder(command).directory(distro).redirectErrorStream(true)
-                builder.environment()["LD_LIBRARY_PATH"] = libDir.absolutePath
-                val started = builder.start()
-                process = started
+                val kvmAvailable = File("/dev/kvm").exists()
+                val accels = if (kvmAvailable) {
+                    listOf("virt,accel=kvm:tcg", "virt,accel=tcg,thread=multi", "virt,accel=tcg")
+                } else {
+                    listOf("virt,accel=tcg,thread=multi", "virt,accel=tcg")
+                }
+                var lastError: String? = null
+                var started: Process? = null
+                for (accel in accels) {
+                    val command = listOf(
+                        qemu.absolutePath, "-M", accel, "-cpu", "cortex-a72",
+                        "-smp", "4", "-m", "1024", "-L", distro.absolutePath,
+                        "-kernel", File(distro, "kernel").absolutePath,
+                        "-initrd", File(distro, "initrd.img").absolutePath,
+                        "-append", "root=/dev/vda rw console=hvc0 console=ttyAMA0 net.ifnames=0 biosdevname=0",
+                        "-drive", "if=none,format=raw,file=${File(distro, "rootfs.img").absolutePath},id=hd0",
+                        "-device", "virtio-blk-device,drive=hd0",
+                        "-netdev", "user,id=net0",
+                        "-device", "virtio-net-pci,netdev=net0",
+                        "-monitor", "none",
+                        "-nographic",
+                    )
+                    val builder = ProcessBuilder(command).directory(distro).redirectErrorStream(true)
+                    builder.environment()["LD_LIBRARY_PATH"] = libDir.absolutePath
+                    builder.environment()["QEMU_AUDIO_DRV"] = "none"
+                    val candidate = builder.start()
+                    if (candidate.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                        lastError = runCatching {
+                            candidate.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }.trim()
+                        }.getOrNull()?.takeIf { it.isNotBlank() } ?: "QEMU falhou ao iniciar (accel $accel)"
+                        continue
+                    }
+                    started = candidate
+                    break
+                }
+                val finalQemu = started ?: error(lastError ?: "Nenhum modo de aceleração funcionou")
+                process = finalQemu
                 withContext(Dispatchers.Main) { state = LinuxUiState.Running }
-                started.inputStream.bufferedReader().useLines { lines ->
-                    lines.forEach { line ->
-                        scope.launch(Dispatchers.Main) { output = (output + line + "\n").takeLast(32_000) }
+                val decoder = Charsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPLACE)
+                    .onUnmappableCharacter(CodingErrorAction.REPLACE)
+                finalQemu.inputStream.use { stream ->
+                    val reader = BufferedReader(InputStreamReader(stream, decoder))
+                    val buffer = CharArray(1024)
+                    while (true) {
+                        val n = reader.read(buffer)
+                        if (n <= 0) break
+                        val chunk = String(buffer, 0, n)
+                        scope.launch(Dispatchers.Main) { output = (output + chunk).takeLast(64_000) }
                     }
                 }
-                val code = started.waitFor()
+                val code = finalQemu.waitFor()
                 process = null
                 withContext(Dispatchers.Main) {
                     if (state is LinuxUiState.Running) state = LinuxUiState.Ready

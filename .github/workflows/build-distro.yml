@@ -1,0 +1,162 @@
+name: Build Debian distro
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [distro]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: distro-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tooling (debootstrap + qemu-user)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq debootstrap qemu-user-static binfmt-support e2fsprogs
+
+      - name: Bootstrap Debian rootfs (foreign)
+        run: |
+          sudo debootstrap --arch=arm64 --variant=minbase --foreign bookworm rootfs https://deb.debian.org/debian
+          sudo cp /usr/bin/qemu-aarch64-static rootfs/usr/bin/
+          sudo cp /etc/resolv.conf rootfs/etc/resolv.conf
+          sudo chroot rootfs /debootstrap/debootstrap --second-stage
+
+      - name: Prepare apt (insecure https only for bootstrap phase)
+        run: |
+          sudo tee rootfs/etc/apt/apt.conf.d/99insecure >/dev/null <<'EOF'
+Acquire::https::Verify-Peer "false";
+Acquire::https::Verify-Host "false";
+EOF
+
+      - name: Prepare initramfs modules list
+        run: |
+          sudo tee rootfs/etc/initramfs-tools/modules >/dev/null <<'EOF'
+ext4
+virtio_blk
+virtio_net
+virtio_console
+virtio_pci
+virtio_scsi
+EOF
+
+      - name: Install system packages (chroot via qemu-user)
+        run: |
+          sudo chroot rootfs /bin/bash -c "export DEBIAN_FRONTEND=noninteractive; export TZ=Etc/UTC; \
+            apt-get update && \
+            apt-get -y -o Dpkg::Options::=--force-confold,confdef install \
+              systemd systemd-sysv dbus initramfs-tools linux-image-arm64 locales \
+              sudo nano curl wget ca-certificates iproute2 iputils-ping procps netbase tzdata && \
+            rm -f /etc/apt/apt.conf.d/99insecure"
+
+      - name: Configure system
+        run: |
+          sudo chroot rootfs /bin/bash <<'EOF'
+export DEBIAN_FRONTEND=noninteractive
+mkdir -p /etc/systemd/network
+cat > /etc/systemd/network/10-eth0.network <<'CONF'
+[Match]
+Name=e*
+
+[Network]
+DHCP=yes
+CONF
+systemctl enable systemd-networkd >/dev/null 2>&1
+
+cat > /etc/fstab <<'CONF'
+/dev/vda / ext4 errors=remount-ro 0 1
+CONF
+
+cat > /etc/resolv.conf <<'CONF'
+nameserver 10.0.2.3
+nameserver 8.8.8.8
+CONF
+
+echo phantom > /etc/hostname
+cat > /etc/hosts <<'CONF'
+127.0.0.1 localhost
+127.0.1.1 phantom
+CONF
+
+for I in ttyAMA0 hvc0; do
+  mkdir -p /etc/systemd/system/serial-getty@$I.service.d
+  cat > /etc/systemd/system/serial-getty@$I.service.d/autologin.conf <<'CONF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root -o "-p -- \\u" --noclear %I 115200 linux
+CONF
+  mkdir -p /etc/systemd/system/serial-getty.target.wants
+  ln -sf /lib/systemd/system/serial-getty@.service /etc/systemd/system/serial-getty.target.wants/serial-getty@$I.service
+done
+
+echo 'LANG=en_US.UTF-8' > /etc/default/locale
+echo 'Etc/UTC' > /etc/timezone
+ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
+locale-gen en_US.UTF-8 >/dev/null 2>&1
+EOF
+
+      - name: Regenerate initramfs with virtio modules
+        run: |
+          sudo chroot rootfs /bin/bash -c "export DEBIAN_FRONTEND=noninteractive; update-initramfs -u -k all"
+
+      - name: Build rootfs.img
+        run: |
+          SIZE=$(du -sm rootfs | cut -f1)
+          COUNT=$((SIZE + 300))
+          dd if=/dev/zero of=rootfs.img bs=1M count=$COUNT status=none
+          mkfs.ext4 -q -d rootfs rootfs.img
+          sudo chown $(id -u):$(id -g) rootfs.img
+
+      - name: Fetch reference QEMU + bios and assemble dist
+        run: |
+          curl -fL -o phantom-old.tar.gz \
+            https://github.com/VSFLima/phantom-releases/releases/download/distro-phantom/phantom.tar.gz
+          mkdir dist
+          tar -xzf phantom-old.tar.gz -C dist
+          rm -f dist/rootfs.img dist/kernel dist/initrd.img dist/VERSION
+          cp rootfs.img dist/rootfs.img
+          cp rootfs/boot/vmlinuz-*-arm64 dist/kernel
+          cp rootfs/boot/initrd.img-*-arm64 dist/initrd.img
+          printf '5' > dist/VERSION
+          test -f dist/qemu-system-aarch64
+          ls -lh dist/kernel dist/initrd.img dist/rootfs.img dist/VERSION
+
+      - name: Package distro
+        run: |
+          tar -czf phantom.tar.gz -C dist .
+          sha256sum phantom.tar.gz | awk '{print $1}' > phantom.sha256
+          ls -lh phantom.tar.gz phantom.sha256
+
+      - name: Publish distro release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete distro-phantom --yes 2>/dev/null || true
+          gh release create distro-phantom \
+            phantom.tar.gz phantom.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Debian 12 (bookworm) distro v5" \
+            --notes "Distro Debian 12 arm64 real, com apt + systemd + rede DHCP. Kernel + initrd com suporte virtio." \
+            --latest
+          gh release view distro-phantom --repo "$GITHUB_REPOSITORY"
+
+      - name: Upload distro artifact
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: phantom-debian-distro
+          path: |
+            phantom.tar.gz
+            phantom.sha256
+          if-no-files-found: error

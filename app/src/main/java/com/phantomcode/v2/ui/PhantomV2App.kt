@@ -310,10 +310,15 @@ private fun EditorScreen(file: WorkspaceFile?, text: String, savedMessage: Strin
 private fun LinuxScreen(runtime: LinuxRuntimeController) {
     var command by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
+    val installScroll = rememberScrollState()
     val clipboard = LocalClipboardManager.current
+    val installing = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Installing
 
     LaunchedEffect(runtime.output) {
-        scrollState.scrollTo(Int.MAX_VALUE)
+        if (!installing) scrollState.scrollTo(Int.MAX_VALUE)
+    }
+    LaunchedEffect(runtime.installLog) {
+        if (installing) installScroll.scrollTo(Int.MAX_VALUE)
     }
 
     Column(Modifier.fillMaxSize().background(Color(0xFF0B0B12))) {
@@ -329,59 +334,64 @@ private fun LinuxScreen(runtime: LinuxRuntimeController) {
             OutlinedButton(onClick = runtime::stop, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running) { Text("Parar") }
         }
         runtime.progress?.let { value -> Text("Download: ${(value * 100).toInt()}%", color = Color(0xFFB794F4), modifier = Modifier.padding(horizontal = 16.dp)) }
-        if (runtime.installLog.isNotBlank()) {
-            Text(
-                runtime.installLog,
-                color = Color(0xFF68D391),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).height(72.dp).verticalScroll(rememberScrollState()),
-            )
-        }
         runtime.error?.let { Text(it, color = Color(0xFFF56565), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp)) }
-        SelectionContainer {
-            Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollState).padding(12.dp)) {
+
+        if (installing) {
+            Box(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(installScroll).padding(12.dp),
+            ) {
                 Text(
-                    runtime.output.ifBlank { "O console Linux aparecerá aqui.\n\nUse a barra abaixo para enviar comandos." },
-                    color = Color(0xFFE2E8F0),
+                    runtime.installLog.ifBlank { "Baixando distro…" },
+                    color = Color(0xFF68D391),
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
+                    fontSize = 11.sp,
                 )
             }
-        }
-        Row(
-            Modifier.fillMaxWidth().background(Color(0xFF171522)).padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = { runCatching { clipboard.setText(AnnotatedString(runtime.output)) } }) {
-                Icon(Icons.Default.ContentCopy, "Copiar saída", tint = Color(0xFFB794F4))
+        } else {
+            SelectionContainer {
+                Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollState).padding(12.dp)) {
+                    Text(
+                        runtime.output.ifBlank { "O console Linux aparecerá aqui.\n\nUse a barra abaixo para enviar comandos." },
+                        color = Color(0xFFE2E8F0),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp,
+                    )
+                }
             }
-            IconButton(onClick = { runCatching { clipboard.getText()?.text?.let { command = it } } }) {
-                Icon(Icons.Default.ContentPaste, "Colar", tint = Color(0xFFB794F4))
+            Row(
+                Modifier.fillMaxWidth().background(Color(0xFF171522)).padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { runCatching { clipboard.setText(AnnotatedString(runtime.output)) } }) {
+                    Icon(Icons.Default.ContentCopy, "Copiar saída", tint = Color(0xFFB794F4))
+                }
+                IconButton(onClick = { runCatching { clipboard.getText()?.text?.let { command = it } } }) {
+                    Icon(Icons.Default.ContentPaste, "Colar", tint = Color(0xFFB794F4))
+                }
+                IconButton(onClick = { runtime.clearOutput() }) {
+                    Icon(Icons.Default.Delete, "Limpar", tint = Color(0xFFB794F4))
+                }
+                BasicTextField(
+                    value = command,
+                    onValueChange = { command = it },
+                    modifier = Modifier.weight(1f).background(Color(0xFF0D0D14)).padding(horizontal = 10.dp, vertical = 8.dp),
+                    textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 14.sp),
+                    cursorBrush = SolidColor(Color(0xFFB794F4)),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = {
+                        if (runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running && command.isNotBlank()) {
+                            runtime.sendInput(command)
+                            command = ""
+                        }
+                    }),
+                )
+                Spacer(Modifier.width(6.dp))
+                Button(
+                    onClick = { runtime.sendInput(command); command = "" },
+                    enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running && command.isNotBlank(),
+                ) { Text("Enviar") }
             }
-            IconButton(onClick = { runtime.clearOutput() }) {
-                Icon(Icons.Default.Delete, "Limpar", tint = Color(0xFFB794F4))
-            }
-            BasicTextField(
-                value = command,
-                onValueChange = { command = it },
-                modifier = Modifier.weight(1f).background(Color(0xFF0D0D14)).padding(horizontal = 10.dp, vertical = 8.dp),
-                textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 14.sp),
-                cursorBrush = SolidColor(Color(0xFFB794F4)),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = {
-                    if (runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running && command.isNotBlank()) {
-                        runtime.sendInput(command)
-                        command = ""
-                    }
-                }),
-            )
-            Spacer(Modifier.width(6.dp))
-            Button(
-                onClick = { runtime.sendInput(command); command = "" },
-                enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running && command.isNotBlank(),
-            ) { Text("Enviar") }
         }
     }
 }
