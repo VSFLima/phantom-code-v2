@@ -51,17 +51,22 @@ class LinuxRuntimeController(context: Context) {
         scope.launch {
             val result = runCatching {
                 val distro = File(appContext.filesDir, "linux/phantom")
-                val qemu = File(appContext.applicationInfo.nativeLibraryDir, "libphantom_qemu.so")
-                check(qemu.isFile && qemu.canExecute()) { "QEMU nativo não está disponível neste APK" }
+                val qemu = File(distro, "qemu-system-aarch64")
+                val libDir = File(distro, "lib")
+                check(qemu.isFile && qemu.canExecute()) { "QEMU não está disponível na distro instalada" }
+                check(libDir.isDirectory) { "Bibliotecas do QEMU não encontradas na distro instalada" }
                 val command = listOf(
                     qemu.absolutePath, "-M", "virt,accel=tcg", "-cpu", "cortex-a72",
-                    "-smp", "2", "-m", "1024", "-kernel", File(distro, "kernel").absolutePath,
+                    "-smp", "2", "-m", "1024", "-L", distro.absolutePath,
+                    "-kernel", File(distro, "kernel").absolutePath,
                     "-initrd", File(distro, "initrd.img").absolutePath,
                     "-append", "root=/dev/vda rw console=hvc0 console=ttyAMA0",
                     "-drive", "if=none,format=raw,file=${File(distro, "rootfs.img").absolutePath},id=hd0",
                     "-device", "virtio-blk-device,drive=hd0", "-nographic",
                 )
-                val started = ProcessBuilder(command).directory(distro).redirectErrorStream(true).start()
+                val builder = ProcessBuilder(command).directory(distro).redirectErrorStream(true)
+                builder.environment()["LD_LIBRARY_PATH"] = libDir.absolutePath
+                val started = builder.start()
                 process = started
                 withContext(Dispatchers.Main) { state = LinuxUiState.Running }
                 started.inputStream.bufferedReader().useLines { lines ->

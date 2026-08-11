@@ -9,13 +9,13 @@ import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 
 private const val PHANTOM_URL = "https://github.com/VSFLima/phantom-releases/releases/download/distro-phantom/phantom.tar.gz"
-private const val PHANTOM_SHA256 = "79d591f67913a33edd22abfa0ac0ff9bf37c053b427d425f155767fb60304d74"
+private const val PHANTOM_SHA_URL = "https://github.com/VSFLima/phantom-releases/releases/download/distro-phantom/phantom.sha256"
 
 class PhantomDistroInstaller(context: Context) {
     private val root = File(context.filesDir, "linux/phantom")
     private val temp = File(context.filesDir, "linux/phantom.installing")
 
-    fun isInstalled(): Boolean = File(root, "rootfs.img").isFile && File(root, "kernel").isFile && File(root, "initrd.img").isFile
+    fun isInstalled(): Boolean = File(root, "rootfs.img").isFile && File(root, "kernel").isFile && File(root, "initrd.img").isFile && File(root, "qemu-system-aarch64").isFile
 
     fun install(onProgress: (Float) -> Unit = {}): Result<Unit> = runCatching {
         temp.deleteRecursively()
@@ -44,13 +44,33 @@ class PhantomDistroInstaller(context: Context) {
             }
         }
         val actual = digest.digest().joinToString("") { "%02x".format(it) }
-        check(actual.equals(PHANTOM_SHA256, ignoreCase = true)) { "SHA-256 da distro inválido" }
+        val expectedSha = downloadSha()
+        check(actual.equals(expectedSha, ignoreCase = true)) { "SHA-256 da distro inválido" }
         GZIPInputStream(archive.inputStream()).use { TarArchive.extract(it, temp) }
         check(File(temp, "rootfs.img").isFile && File(temp, "kernel").isFile && File(temp, "initrd.img").isFile) {
             "Pacote da distro incompleto"
         }
+        makeExecutable(File(temp, "qemu-system-aarch64"))
+        File(temp, "lib").listFiles()?.forEach { makeExecutable(it) }
         root.deleteRecursively()
         check(temp.renameTo(root)) { "Não foi possível finalizar a instalação" }
+    }
+
+    private fun downloadSha(): String {
+        val connection = URL(PHANTOM_SHA_URL).openConnection() as HttpURLConnection
+        connection.connectTimeout = 20_000
+        connection.readTimeout = 30_000
+        connection.instanceFollowRedirects = true
+        connection.setRequestProperty("User-Agent", "Phantom-Code-V2")
+        check(connection.responseCode in 200..299) { "Falha ao obter o checksum da distro (HTTP ${connection.responseCode})" }
+        return connection.inputStream.bufferedReader().use { it.readText().trim() }
+    }
+
+    private fun makeExecutable(file: File) {
+        if (!file.isFile) return
+        file.setExecutable(true, false)
+        file.setReadable(true)
+        file.setWritable(false)
     }
 }
 
