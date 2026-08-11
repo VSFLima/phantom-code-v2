@@ -10,12 +10,15 @@ import java.util.zip.GZIPInputStream
 
 private const val PHANTOM_URL = "https://github.com/VSFLima/phantom-releases/releases/download/distro-phantom/phantom.tar.gz"
 private const val PHANTOM_SHA_URL = "https://github.com/VSFLima/phantom-releases/releases/download/distro-phantom/phantom.sha256"
+private const val DISTRO_VERSION = 2
 
 class PhantomDistroInstaller(context: Context) {
     private val root = File(context.filesDir, "linux/phantom")
     private val temp = File(context.filesDir, "linux/phantom.installing")
 
-    fun isInstalled(): Boolean = File(root, "rootfs.img").isFile && File(root, "kernel").isFile && File(root, "initrd.img").isFile && File(root, "qemu-system-aarch64").isFile
+    fun isInstalled(): Boolean = File(root, "rootfs.img").isFile && File(root, "kernel").isFile && File(root, "initrd.img").isFile && File(root, "qemu-system-aarch64").isFile && installedVersion() == DISTRO_VERSION
+
+    private fun installedVersion(): Int? = runCatching { File(root, "VERSION").readText().trim().toInt() }.getOrNull()
 
     fun install(onProgress: (Float) -> Unit = {}): Result<Unit> = runCatching {
         temp.deleteRecursively()
