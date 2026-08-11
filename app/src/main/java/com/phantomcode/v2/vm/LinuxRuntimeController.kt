@@ -23,6 +23,8 @@ class LinuxRuntimeController(context: Context) {
         private set
     var progress by mutableStateOf<Float?>(null)
         private set
+    var installLog by mutableStateOf("")
+        private set
     var error by mutableStateOf<String?>(null)
         private set
 
@@ -30,13 +32,18 @@ class LinuxRuntimeController(context: Context) {
         if (state is LinuxUiState.Installing || installer.isInstalled()) return
         state = LinuxUiState.Installing
         error = null
+        installLog = ""
         progress = 0f
         scope.launch {
-            val result = installer.install { value -> scope.launch(Dispatchers.Main) { progress = value } }
+            val result = installer.install(
+                onProgress = { value -> scope.launch(Dispatchers.Main) { progress = value } },
+                onLog = { line -> scope.launch(Dispatchers.Main) { installLog = (installLog + line + "\n").takeLast(16_000) } },
+            )
             withContext(Dispatchers.Main) {
                 progress = null
-                result.onSuccess { state = LinuxUiState.Ready }.onFailure {
+                result.onSuccess { installLog += "Distro instalada.\n"; state = LinuxUiState.Ready }.onFailure {
                     state = LinuxUiState.Error
+                    installLog += "Erro: ${it.message}\n"
                     error = it.message ?: "Falha ao instalar a distro"
                 }
             }
@@ -51,10 +58,15 @@ class LinuxRuntimeController(context: Context) {
         scope.launch {
             val result = runCatching {
                 val distro = File(appContext.filesDir, "linux/phantom")
-                val qemu = File(distro, "qemu-system-aarch64")
                 val libDir = File(distro, "lib")
-                check(qemu.isFile && qemu.canExecute()) { "QEMU não está disponível na distro instalada" }
                 check(libDir.isDirectory) { "Bibliotecas do QEMU não encontradas na distro instalada" }
+                val nativeQemu = File(appContext.applicationInfo.nativeLibraryDir, "libphantom_qemu.so")
+                val distroQemu = File(distro, "qemu-system-aarch64")
+                val qemu = when {
+                    nativeQemu.isFile && nativeQemu.canExecute() -> nativeQemu
+                    distroQemu.isFile && distroQemu.canExecute() -> distroQemu
+                    else -> error("QEMU não está disponível na distro instalada")
+                }
                 val command = listOf(
                     qemu.absolutePath, "-M", "virt,accel=tcg", "-cpu", "cortex-a72",
                     "-smp", "2", "-m", "1024", "-L", distro.absolutePath,

@@ -20,7 +20,7 @@ class PhantomDistroInstaller(context: Context) {
 
     private fun installedVersion(): Int? = runCatching { File(root, "VERSION").readText().trim().toInt() }.getOrNull()
 
-    fun install(onProgress: (Float) -> Unit = {}): Result<Unit> = runCatching {
+    fun install(onProgress: (Float) -> Unit = {}, onLog: (String) -> Unit = {}): Result<Unit> = runCatching {
         temp.deleteRecursively()
         temp.mkdirs()
         val archive = File(temp, "phantom.tar.gz")
@@ -30,6 +30,7 @@ class PhantomDistroInstaller(context: Context) {
         connection.instanceFollowRedirects = true
         connection.setRequestProperty("User-Agent", "Phantom-Code-V2")
         check(connection.responseCode in 200..299) { "Download HTTP ${connection.responseCode}" }
+        onLog("Baixando distro…")
         val digest = MessageDigest.getInstance("SHA-256")
         connection.inputStream.use { input ->
             archive.outputStream().use { output ->
@@ -37,26 +38,39 @@ class PhantomDistroInstaller(context: Context) {
                 var total = 0L
                 val length = connection.contentLengthLong
                 var count: Int
+                var lastLogged = -1L
                 while (input.read(buffer).also { count = it } >= 0) {
                     if (count == 0) continue
                     output.write(buffer, 0, count)
                     digest.update(buffer, 0, count)
                     total += count
-                    if (length > 0) onProgress(total.toFloat() / length.toFloat())
+                    if (length > 0) {
+                        onProgress(total.toFloat() / length.toFloat())
+                        val mb = total / (1000 * 1000)
+                        if (mb != lastLogged) {
+                            lastLogged = mb
+                            if (mb % 25 == 0L || mb == length / (1000 * 1000)) onLog("Baixado $mb MB")
+                        }
+                    }
                 }
             }
         }
+        onLog("Download concluído. Verificando SHA-256…")
         val actual = digest.digest().joinToString("") { "%02x".format(it) }
         val expectedSha = downloadSha()
-        check(actual.equals(expectedSha, ignoreCase = true)) { "SHA-256 da distro inválido" }
-        GZIPInputStream(archive.inputStream()).use { TarArchive.extract(it, temp) }
+        check(actual.equals(expectedSha, ignoreCase = true)) { "SHA-256 da distro inválido (esperado $expectedSha)" }
+        onLog("SHA-256 OK. Extraindo…")
+        GZIPInputStream(archive.inputStream()).use { TarArchive.extract(it, temp, onLog) }
         check(File(temp, "rootfs.img").isFile && File(temp, "kernel").isFile && File(temp, "initrd.img").isFile) {
             "Pacote da distro incompleto"
         }
+        onLog("Aplicando permissões…")
         makeExecutable(File(temp, "qemu-system-aarch64"))
         File(temp, "lib").listFiles()?.forEach { makeExecutable(it) }
+        onLog("Finalizando instalação…")
         root.deleteRecursively()
         check(temp.renameTo(root)) { "Não foi possível finalizar a instalação" }
+        onLog("Distro instalada (v$DISTRO_VERSION).")
     }
 
     private fun downloadSha(): String {
@@ -78,17 +92,20 @@ class PhantomDistroInstaller(context: Context) {
 }
 
 private object TarArchive {
-    fun extract(input: InputStream, destination: File) {
+    fun extract(input: InputStream, destination: File, onFile: (String) -> Unit = {}) {
         val root = destination.canonicalFile
         val header = ByteArray(512)
         val buffer = ByteArray(64 * 1024)
+        var index = 0
         while (readFully(input, header)) {
             if (header.all { it == 0.toByte() }) break
             val name = String(header, 0, 100, Charsets.UTF_8).trimEnd('\u0000').trimStart('/', '.')
-            if (name.isBlank()) break
+            if (name.isBlank()) continue
             val size = String(header, 124, 12, Charsets.UTF_8).trim().trimEnd('\u0000').toLongOrNull(8) ?: 0L
             val target = File(destination, name).canonicalFile
             check(target.path.startsWith(root.path + File.separator)) { "Entrada TAR inválida" }
+            index++
+            onFile("Extraindo $index: $name")
             if (header[156].toInt().toChar() == '5' || name.endsWith('/')) {
                 target.mkdirs()
             } else {

@@ -6,8 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangementimport androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Code
@@ -307,6 +308,14 @@ private fun LinuxScreen(runtime: LinuxRuntimeController) {
             OutlinedButton(onClick = runtime::stop, enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running) { Text("Parar") }
         }
         runtime.progress?.let { value -> Text("Download: ${(value * 100).toInt()}%", color = Color(0xFFB794F4)) }
+        if (runtime.installLog.isNotBlank()) {
+            Column(
+                Modifier.fillMaxWidth().weight(1f, fill = false).height(160.dp)
+                    .background(Color(0xFF171522)).verticalScroll(rememberScrollState()).padding(10.dp),
+            ) {
+                Text(runtime.installLog, color = Color(0xFF68D391), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+            }
+        }
         runtime.error?.let { Text(it, color = Color(0xFFF56565), fontSize = 12.sp) }
         BasicTextField(
             value = command,
