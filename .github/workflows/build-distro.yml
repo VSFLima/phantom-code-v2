@@ -36,20 +36,20 @@ jobs:
       - name: Prepare apt (insecure https only for bootstrap phase)
         run: |
           sudo tee rootfs/etc/apt/apt.conf.d/99insecure >/dev/null <<'EOF'
-Acquire::https::Verify-Peer "false";
-Acquire::https::Verify-Host "false";
-EOF
+          Acquire::https::Verify-Peer "false";
+          Acquire::https::Verify-Host "false";
+          EOF
 
       - name: Prepare initramfs modules list
         run: |
           sudo tee rootfs/etc/initramfs-tools/modules >/dev/null <<'EOF'
-ext4
-virtio_blk
-virtio_net
-virtio_console
-virtio_pci
-virtio_scsi
-EOF
+          ext4
+          virtio_blk
+          virtio_net
+          virtio_console
+          virtio_pci
+          virtio_scsi
+          EOF
 
       - name: Install system packages (chroot via qemu-user)
         run: |
@@ -62,49 +62,50 @@ EOF
 
       - name: Configure system
         run: |
-          sudo chroot rootfs /bin/bash <<'EOF'
-export DEBIAN_FRONTEND=noninteractive
-mkdir -p /etc/systemd/network
-cat > /etc/systemd/network/10-eth0.network <<'CONF'
-[Match]
-Name=e*
+          sudo chroot rootfs /bin/bash <<'SCRIPT'
+          set -e
+          export DEBIAN_FRONTEND=noninteractive
+          mkdir -p /etc/systemd/network
+          cat > /etc/systemd/network/10-eth0.network <<'CONF'
+          [Match]
+          Name=e*
 
-[Network]
-DHCP=yes
-CONF
-systemctl enable systemd-networkd >/dev/null 2>&1
+          [Network]
+          DHCP=yes
+          CONF
+          systemctl enable systemd-networkd >/dev/null 2>&1
 
-cat > /etc/fstab <<'CONF'
-/dev/vda / ext4 errors=remount-ro 0 1
-CONF
+          cat > /etc/fstab <<'CONF'
+          /dev/vda / ext4 errors=remount-ro 0 1
+          CONF
 
-cat > /etc/resolv.conf <<'CONF'
-nameserver 10.0.2.3
-nameserver 8.8.8.8
-CONF
+          cat > /etc/resolv.conf <<'CONF'
+          nameserver 10.0.2.3
+          nameserver 8.8.8.8
+          CONF
 
-echo phantom > /etc/hostname
-cat > /etc/hosts <<'CONF'
-127.0.0.1 localhost
-127.0.1.1 phantom
-CONF
+          echo phantom > /etc/hostname
+          cat > /etc/hosts <<'CONF'
+          127.0.0.1 localhost
+          127.0.1.1 phantom
+          CONF
 
-for I in ttyAMA0 hvc0; do
-  mkdir -p /etc/systemd/system/serial-getty@$I.service.d
-  cat > /etc/systemd/system/serial-getty@$I.service.d/autologin.conf <<'CONF'
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin root -o "-p -- \\u" --noclear %I 115200 linux
-CONF
-  mkdir -p /etc/systemd/system/serial-getty.target.wants
-  ln -sf /lib/systemd/system/serial-getty@.service /etc/systemd/system/serial-getty.target.wants/serial-getty@$I.service
-done
+          for I in ttyAMA0 hvc0; do
+            mkdir -p /etc/systemd/system/serial-getty@$I.service.d
+            cat > /etc/systemd/system/serial-getty@$I.service.d/autologin.conf <<'CONF'
+          [Service]
+          ExecStart=
+          ExecStart=-/sbin/agetty --autologin root -o "-p -- \\u" --noclear %I 115200 linux
+          CONF
+            mkdir -p /etc/systemd/system/serial-getty.target.wants
+            ln -sf /lib/systemd/system/serial-getty@.service /etc/systemd/system/serial-getty.target.wants/serial-getty@$I.service
+          done
 
-echo 'LANG=en_US.UTF-8' > /etc/default/locale
-echo 'Etc/UTC' > /etc/timezone
-ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
-locale-gen en_US.UTF-8 >/dev/null 2>&1
-EOF
+          echo 'LANG=en_US.UTF-8' > /etc/default/locale
+          echo 'Etc/UTC' > /etc/timezone
+          ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
+          locale-gen en_US.UTF-8 >/dev/null 2>&1
+          SCRIPT
 
       - name: Regenerate initramfs with virtio modules
         run: |
