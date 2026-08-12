@@ -23,7 +23,7 @@ android {
     if (hasSigningEnv) {
         signingConfigs {
             create("release") {
-                val ksFile = layout.buildDirectory.file("phantom-release.jks").get().asFile
+                val ksFile = File(System.getProperty("java.io.tmpdir"), "phantom-release.jks")
                 ksFile.writeBytes(Base64.getDecoder().decode(System.getenv("KEYSTORE_BASE64")))
                 storeFile = ksFile
                 storePassword = System.getenv("KEYSTORE_PASSWORD")
