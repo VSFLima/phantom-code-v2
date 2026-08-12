@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -22,7 +24,7 @@ android {
         signingConfigs {
             create("release") {
                 val ksFile = layout.buildDirectory.file("phantom-release.jks").get().asFile
-                ksFile.writeBytes(java.util.Base64.getDecoder().decode(System.getenv("KEYSTORE_BASE64")))
+                ksFile.writeBytes(Base64.getDecoder().decode(System.getenv("KEYSTORE_BASE64")))
                 storeFile = ksFile
                 storePassword = System.getenv("KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("KEY_ALIAS") ?: "phantom"
