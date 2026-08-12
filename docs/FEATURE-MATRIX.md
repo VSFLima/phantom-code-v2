@@ -51,15 +51,28 @@ erro visível, recuperação/repetição e teste de reabertura do app.
 
 | Função | Status | Observação |
 | --- | --- | --- |
-| Contrato de estado do runtime | em andamento | Primeiro esqueleto publicado |
-| Instalação transacional | em andamento | Download, SHA-256 e troca atômica implementados |
-| Verificação SHA-256 | em andamento | Implementada para o pacote Phantom |
-| QEMU ARM64 | em andamento | Empacotado no APK pelo workflow; falta validar no aparelho |
-| Iniciar/parar VM | em andamento | Primeiro fluxo implementado |
-| Terminal Linux interativo | em andamento | Entrada/saída inicial implementada; falta teste real |
-| Comandos no guest | pendente | Sem scanner concorrendo com console |
+| Contrato de estado do runtime | feito | Esqueleto publicado e validado |
+| Instalação transacional | feito | Download, SHA-256 e troca atômica validados |
+| Verificação SHA-256 | feito | Validada para o pacote Phantom |
+| QEMU ARM64 | feito | Empacotado no APK e validado no aparelho |
+| Iniciar/parar VM | feito | Fluxo validado |
+| Terminal Linux interativo | feito | Entrada/saída validada no aparelho |
+| Comandos no guest | feito | Comandos executados no guest (distro v6) |
+| Autologin no console | feito | Getty `--autologin root` (v6) + senha fallback `phantom` |
+| Teclado/IME no terminal | feito | `adjustResize` + `imePadding`; barra sempre visível |
+| Rede no guest | feito | DHCP via systemd-networkd + QEMU user |
 | Trocar distro | pendente | Uma distro ativa por vez inicialmente |
 | Desinstalar distro | pendente | Confirmar e selecionar fallback |
+
+## Build E Assinatura
+
+| Função | Status | Observação |
+| --- | --- | --- |
+| Build distro via GitHub Actions | feito | `build-distro.yml`; release `distro-phantom` |
+| Build APK via GitHub Actions | feito | `build.yml`; release `v2-release-<n>` |
+| Assinatura privada do APK | feito | Keystore próprio; ver `docs/SIGNING.md` |
+| Keystore versionado no backup | feito | `/root/phantom-keystore-backup/` |
+| Secrets do GitHub | feito | `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` |
 
 ## Configurações E IA
 
@@ -81,3 +94,20 @@ Cada mudança deve atualizar esta matriz e registrar:
 - workflow do GitHub;
 - teste manual ou automatizado executado;
 - limitações conhecidas.
+
+## Alterações 2026-08-12
+
+- **Distro v6** (`build-distro.yml`, commit `09c92b5`): getty com
+  `--autologin root` sem `-o` (corrige prompt de senha) + senha root `phantom`
+  como fallback. Testado no aparelho: boot completo, rede DHCP e comandos no
+  guest OK.
+- **Terminal Linux** (commit `65a9061`): barra de digitação sempre visível,
+  toque no console foca o campo e abre o teclado; `imePadding()` +
+  `adjustResize` fazem a tela encolher em vez de fugir com o teclado. Testado
+  no aparelho.
+- **Assinatura privada** (commits `65a9061`..`5e62f5e`): keystore próprio
+  (alias `phantom`), secrets `KEYSTORE_BASE64`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`,
+  release `v2-release-47` assinado e verificado com apksigner. Limitação:
+  keystore PKCS12 exige storepass == keypass.
+- **Documentação**: `docs/SIGNING.md` com backup da chave em
+  `/root/phantom-keystore-backup/`.
