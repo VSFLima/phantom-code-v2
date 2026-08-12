@@ -96,11 +96,13 @@ jobs:
             cat > /etc/systemd/system/serial-getty@$I.service.d/autologin.conf <<'CONF'
           [Service]
           ExecStart=
-          ExecStart=-/sbin/agetty --autologin root -o "-p -- \\u" --noclear %I 115200 linux
+          ExecStart=-/sbin/agetty --autologin root --noclear %I 115200,57600,38400,9600 linux
           CONF
             mkdir -p /etc/systemd/system/serial-getty.target.wants
             ln -sf /lib/systemd/system/serial-getty@.service /etc/systemd/system/serial-getty.target.wants/serial-getty@$I.service
           done
+
+          echo 'root:phantom' | chpasswd
 
           echo 'LANG=en_US.UTF-8' > /etc/default/locale
           echo 'Etc/UTC' > /etc/timezone
@@ -130,7 +132,7 @@ jobs:
           cp rootfs.img dist/rootfs.img
           cp rootfs/boot/vmlinuz-*-arm64 dist/kernel
           cp rootfs/boot/initrd.img-*-arm64 dist/initrd.img
-          printf '5' > dist/VERSION
+          printf '6' > dist/VERSION
           test -f dist/qemu-system-aarch64
           ls -lh dist/kernel dist/initrd.img dist/rootfs.img dist/VERSION
 

@@ -53,6 +53,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -312,6 +314,8 @@ private fun LinuxScreen(runtime: LinuxRuntimeController) {
     val scrollState = rememberScrollState()
     val installScroll = rememberScrollState()
     val clipboard = LocalClipboardManager.current
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val installing = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Installing
 
     LaunchedEffect(runtime.output) {
@@ -320,6 +324,9 @@ private fun LinuxScreen(runtime: LinuxRuntimeController) {
     LaunchedEffect(runtime.installLog) {
         if (installing) installScroll.scrollTo(Int.MAX_VALUE)
     }
+
+    val canSend = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running ||
+        runtime.state is com.phantomcode.v2.vm.LinuxUiState.Starting
 
     Column(Modifier.fillMaxSize().background(Color(0xFF0B0B12))) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -336,62 +343,68 @@ private fun LinuxScreen(runtime: LinuxRuntimeController) {
         runtime.progress?.let { value -> Text("Download: ${(value * 100).toInt()}%", color = Color(0xFFB794F4), modifier = Modifier.padding(horizontal = 16.dp)) }
         runtime.error?.let { Text(it, color = Color(0xFFF56565), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp)) }
 
-        if (installing) {
-            Box(
-                Modifier.weight(1f).fillMaxWidth().verticalScroll(installScroll).padding(12.dp),
-            ) {
-                Text(
-                    runtime.installLog.ifBlank { "Baixando distro…" },
-                    color = Color(0xFF68D391),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                )
-            }
-        } else {
-            SelectionContainer {
-                Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollState).padding(12.dp)) {
+        Box(
+            Modifier.weight(1f).fillMaxWidth()
+                .clickable { focusRequester.requestFocus(); keyboard?.show() }
+        ) {
+            if (installing) {
+                Box(
+                    Modifier.fillMaxSize().verticalScroll(installScroll).padding(12.dp),
+                ) {
                     Text(
-                        runtime.output.ifBlank { "O console Linux aparecerá aqui.\n\nUse a barra abaixo para enviar comandos." },
-                        color = Color(0xFFE2E8F0),
+                        runtime.installLog.ifBlank { "Baixando distro…" },
+                        color = Color(0xFF68D391),
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
+                        fontSize = 11.sp,
                     )
                 }
+            } else {
+                SelectionContainer {
+                    Box(Modifier.fillMaxSize().verticalScroll(scrollState).padding(12.dp)) {
+                        Text(
+                            runtime.output.ifBlank { "O console Linux aparecerá aqui.\n\nUse a barra abaixo para enviar comandos." },
+                            color = Color(0xFFE2E8F0),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
             }
-            Row(
-                Modifier.fillMaxWidth().background(Color(0xFF171522)).padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = { runCatching { clipboard.setText(AnnotatedString(runtime.output)) } }) {
-                    Icon(Icons.Default.ContentCopy, "Copiar saída", tint = Color(0xFFB794F4))
-                }
-                IconButton(onClick = { runCatching { clipboard.getText()?.text?.let { command = it } } }) {
-                    Icon(Icons.Default.ContentPaste, "Colar", tint = Color(0xFFB794F4))
-                }
-                IconButton(onClick = { runtime.clearOutput() }) {
-                    Icon(Icons.Default.Delete, "Limpar", tint = Color(0xFFB794F4))
-                }
-                BasicTextField(
-                    value = command,
-                    onValueChange = { command = it },
-                    modifier = Modifier.weight(1f).background(Color(0xFF0D0D14)).padding(horizontal = 10.dp, vertical = 8.dp),
-                    textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 14.sp),
-                    cursorBrush = SolidColor(Color(0xFFB794F4)),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = {
-                        if (runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running && command.isNotBlank()) {
-                            runtime.sendInput(command)
-                            command = ""
-                        }
-                    }),
-                )
-                Spacer(Modifier.width(6.dp))
-                Button(
-                    onClick = { runtime.sendInput(command); command = "" },
-                    enabled = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running && command.isNotBlank(),
-                ) { Text("Enviar") }
+        }
+        Row(
+            Modifier.fillMaxWidth().background(Color(0xFF171522)).padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = { runCatching { clipboard.setText(AnnotatedString(runtime.output)) } }) {
+                Icon(Icons.Default.ContentCopy, "Copiar saída", tint = Color(0xFFB794F4))
             }
+            IconButton(onClick = { runCatching { clipboard.getText()?.text?.let { command = it } } }) {
+                Icon(Icons.Default.ContentPaste, "Colar", tint = Color(0xFFB794F4))
+            }
+            IconButton(onClick = { runtime.clearOutput() }) {
+                Icon(Icons.Default.Delete, "Limpar", tint = Color(0xFFB794F4))
+            }
+            BasicTextField(
+                value = command,
+                onValueChange = { command = it },
+                modifier = Modifier.weight(1f).background(Color(0xFF0D0D14)).padding(horizontal = 10.dp, vertical = 8.dp)
+                    .focusRequester(focusRequester),
+                textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 14.sp),
+                cursorBrush = SolidColor(Color(0xFFB794F4)),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = {
+                    if (canSend && command.isNotBlank()) {
+                        runtime.sendInput(command)
+                        command = ""
+                    }
+                }),
+            )
+            Spacer(Modifier.width(6.dp))
+            Button(
+                onClick = { runtime.sendInput(command); command = "" },
+                enabled = canSend && command.isNotBlank(),
+            ) { Text("Enviar") }
         }
     }
 }

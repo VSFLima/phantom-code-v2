@@ -10,7 +10,7 @@ import java.util.zip.GZIPInputStream
 
 private const val PHANTOM_URL = "https://github.com/VSFLima/phantom-code-v2/releases/download/distro-phantom/phantom.tar.gz"
 private const val PHANTOM_SHA_URL = "https://github.com/VSFLima/phantom-code-v2/releases/download/distro-phantom/phantom.sha256"
-private const val DISTRO_VERSION = 5 // Debian 12 (bookworm) arm64, com apt + systemd
+private const val DISTRO_VERSION = 6 // Debian 12 (bookworm) arm64, autologin fix + senha root
 
 class PhantomDistroInstaller(context: Context) {
     private val root = File(context.filesDir, "linux/phantom")
