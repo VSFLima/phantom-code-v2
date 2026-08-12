@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -328,7 +329,7 @@ private fun LinuxScreen(runtime: LinuxRuntimeController) {
     val canSend = runtime.state is com.phantomcode.v2.vm.LinuxUiState.Running ||
         runtime.state is com.phantomcode.v2.vm.LinuxUiState.Starting
 
-    Column(Modifier.fillMaxSize().background(Color(0xFF0B0B12))) {
+    Column(Modifier.fillMaxSize().background(Color(0xFF0B0B12)).imePadding()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Terminal, null, tint = Color(0xFFB794F4))
             Spacer(Modifier.width(8.dp))

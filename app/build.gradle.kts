@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val hasSigningEnv = System.getenv("KEYSTORE_BASE64") != null
+
 android {
     namespace = "com.phantomcode.v2"
     compileSdk = 35
@@ -12,13 +14,27 @@ android {
         applicationId = "com.phantomcode.v2"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-v2"
+        versionCode = 2
+        versionName = "0.2.0-v2"
+    }
+
+    if (hasSigningEnv) {
+        signingConfigs {
+            create("release") {
+                val ksFile = layout.buildDirectory.file("phantom-release.jks").get().asFile
+                ksFile.writeBytes(java.util.Base64.getDecoder().decode(System.getenv("KEYSTORE_BASE64")))
+                storeFile = ksFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS") ?: "phantom"
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasSigningEnv) signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -35,7 +51,7 @@ android {
 }
 
 kotlin {
-    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.dsl.JvmTarget.JVM_17) }
 }
 
 dependencies {
